@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>Unsupporting Browser | nfcryp.to</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="https://calamity-inc.github.io/Silver/base.css">
+</head>
+<body>
+	<h1>Your browser does not support the required APIs</h1>
+	<p>To make use of this tool, please open the page in a browser with NFC support (Chrome for Android, Opera Android, Samsung Browser).</p>
+	<img id="qrcode" />
+	<script>
+		const toolUrl = `https://nfcryp.to/${location.hash.replace("#", "")}`;
+
+		if (("NDEFReader" in window) && ("BarcodeDetector" in window)) {
+			location.href = toolUrl;
+		}
+
+		function onPlutoReady() {
+			pluto_invoke("set_qr_code", toolUrl);
+		}
+	</script>
+	<script src="https://pluto-lang.org/wasm-builds/out/libpluto/0.13.2/libpluto.js"></script>
+	<link rel="preload" href="https://pluto-lang.org/wasm-builds/out/libpluto/0.13.2/libpluto.wasm" as="fetch" type="application/wasm" crossorigin>
+	<script src="https://cdn.jsdelivr.net/gh/PlutoLang/PlutoScript@0.1.2/plutoscript.js"></script>
+	<script type="pluto">
+		local { base64, canvas } = require "*"
+
+		function set_qr_code(uri)
+			local c = canvas.qrcode(uri, { bg = 0x111111, fg = 0xffffff, border = 5, ecl = "low" })
+			c:mulsize(6)
+			document.getElementById("qrcode").src = "data:image/png;base64,"..base64.encode(c:topng())
+		end
+
+		js_invoke("onPlutoReady")
+	</script>
+</body>
+</html>

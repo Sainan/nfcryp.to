@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>TOTP Demo | nfcryp.to</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="https://calamity-inc.github.io/Silver/base.css">
+</head>
+<body>
+	<center>
+		<h1 id="value" style="margin-bottom:30px">Loading...</h1>
+		<img id="qrcode" />
+	</center>
+	<script src="https://pluto-lang.org/wasm-builds/out/libpluto/0.13.2/libpluto.js"></script>
+	<link rel="preload" href="https://pluto-lang.org/wasm-builds/out/libpluto/0.13.2/libpluto.wasm" as="fetch" type="application/wasm" crossorigin>
+	<script src="https://cdn.jsdelivr.net/gh/PlutoLang/PlutoScript@0.1.2/plutoscript.js"></script>
+	<script>
+		function start_timer() {
+			setInterval(() => {
+				pluto_invoke("update_value")
+			}, 1000);
+		}
+	</script>
+	<script type="pluto">
+		local { base32, base64, canvas, crypto } = require "*"
+
+		local function hotp(secret, counter)
+			local mac = crypto.hmac("sha1", secret, ">I8":pack(counter), true)
+			local offset = 1 + (mac:byte(20) & 0xf)
+			local bin_code = ((mac:byte(offset) & 0x7f) << 24)
+				| (mac:byte(offset + 1) << 16)
+				| (mac:byte(offset + 2) << 8)
+				| (mac:byte(offset + 3))
+			return string.format("%06d", bin_code % 1000000)
+		end
+
+		local secret = string.pack("I4I4I4I4", crypto.random(0, 0xffffffff), crypto.random(0, 0xffffffff), crypto.random(0, 0xffffffff), crypto.random(0, 0xffffffff))
+
+		function update_value()
+			document.getElementById("value").textContent = hotp(secret, os.unixseconds() // 30)
+		end
+
+		local uri = "otpauth://totp/nfcryp.to totp demo?secret="..base32.encode(secret, false)
+		print(uri)
+		local c = canvas.qrcode(uri, { bg = 0x111111, fg = 0xffffff, border = 0, ecl = "low" })
+		c:mulsize(6)
+		document.getElementById("qrcode").src = "data:image/png;base64,"..base64.encode(c:topng())
+		update_value()
+		js_invoke("start_timer")
+	</script>
+</body>
+</html>

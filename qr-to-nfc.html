@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>QR Code to NFC Writer | nfcryp.to</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="https://calamity-inc.github.io/Silver/base.css">
+</head>
+<body>
+	<center>
+		<video id="video" style="display:none;background:#222;width:100%;height:auto" playsinline muted></video>
+		<p id="status">Scan a QR Code then write its data to an NFC tag. Sound good?</p>
+		<button class="slv-button" onclick="startScanner();">Let's go</button>
+	</center>
+	<script>
+		if (!("BarcodeDetector" in window) || !("NDEFReader" in window)) {
+			location.href = "/unsupported#qr-to-nfc";
+		}
+
+		const video = document.getElementById("video");
+		const status = document.getElementById("status");
+
+		let stream = null;
+
+		const detector = new BarcodeDetector({ formats: ["qr_code"] });
+
+		async function startScanner() {
+			video.style.display = "block";
+			status.textContent = "Point the camera at a QR Code...";
+			document.querySelector("button").style.display = "none";
+			try {
+				// facingMode "environment" = back camera
+				stream = await navigator.mediaDevices.getUserMedia({
+					video: { facingMode: { ideal: "environment" } },
+					audio: false
+				});
+				video.srcObject = stream;
+				await video.play();
+				requestAnimationFrame(scanLoop);
+			} catch (err) {
+				status.textContent = "Camera error: " + err.message;
+			}
+		}
+
+		function stopScanner() {
+			if (stream) stream.getTracks().forEach(t => t.stop());
+			video.srcObject = null;
+			video.style.display = "none";
+		}
+
+		async function scanLoop() {
+			if (video.readyState === video.HAVE_ENOUGH_DATA) {
+				const codes = await detector.detect(video).catch(() => []);
+				if (codes.length) {
+					onQrFound(codes[0].rawValue);
+					stopScanner();
+					return;
+				}
+			}
+			requestAnimationFrame(scanLoop);
+		}
+
+		function onQrFound(text) {
+			status.textContent = "QR code scanned. Tap the NFC tag to write.";
+			const ndef = new NDEFReader();
+			ndef
+			.write({
+				records: [
+					{ recordType: "url", data: "https://nfcryp.to" },
+					{ recordType: "text", data: text },
+				],
+			})
+			.then(() => {
+				status.innerHTML = `Secret written. Proceed to the <a href="nfc-authenticator">NFC Authenticator</a> if you wanna grab a 6-digit login code.`;
+				ndef.scan(); // swallow any events related to the tag being read. we just wrote it. we don't care.
+			})
+			.catch((error) => {
+				status.textContent = `Write failed: ${error}`;
+			});
+		}
+
+		navigator.permissions.query({ name: "nfc" }).then((result) => {
+			if (result.state == "granted") {
+				startScanner(); // we already have permission, so we don't need to coerce the user into pushing a button just so the damn permission request even shows up.
+			}
+		});
+	</script>
+</body>
+</html>

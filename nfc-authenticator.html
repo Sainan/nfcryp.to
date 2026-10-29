@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>NFC Authenticator | nfcryp.to</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="https://calamity-inc.github.io/Silver/base.css">
+</head>
+<body>
+	<center>
+		<h1 id="value"></h1>
+		<p id="status">Read your NFC tag with a TOTP secret on it to get a 6-digit login code. Sound good?</p>
+		<button class="slv-button" onclick="begin();">Let's go</button>
+	</center>
+	<script>
+		if (!("NDEFReader" in window)) {
+			location.href = "/unsupported#nfc-authenticator";
+		}
+
+		const status = document.getElementById("status");
+
+		function begin() {
+			const ndef = new NDEFReader();
+			ndef
+			.scan()
+			.then(() => {
+				status.textContent = "Tap your NFC tag to read it.";
+				document.querySelector("button").style.display = "none";
+				ndef.onreadingerror = (event) => {
+					status.textContent = "Failed to read the NFC tag.";
+				};
+				ndef.onreading = (event) => {
+					for (const r of event.message.records) {
+						if (r.recordType == "text") {
+							const text = new TextDecoder().decode(r.data/*as DataView*/.buffer);
+							if (text.startsWith("otpauth://totp/")) {
+								const [name, secret] = text.substr(15).split("?secret=");
+								if (name && secret) {
+									pluto_invoke("update_value", secret);
+									status.textContent = name;
+									return;
+								}
+							}
+						}
+					}
+					status.textContent = "NFC tag does not contain a TOTP secret.";
+				};
+			})
+			.catch((error) => {
+				status.textContent = `Error: ${error}`;
+			});
+		}
+
+		navigator.permissions.query({ name: "nfc" }).then((result) => {
+			if (result.state == "granted") {
+				begin(); // we already have permission, so we don't need to coerce the user into pushing a button just so the damn permission request even shows up.
+			}
+		});
+	</script>
+	<script src="https://pluto-lang.org/wasm-builds/out/libpluto/0.13.2/libpluto.js"></script>
+	<link rel="preload" href="https://pluto-lang.org/wasm-builds/out/libpluto/0.13.2/libpluto.wasm" as="fetch" type="application/wasm" crossorigin>
+	<script src="https://cdn.jsdelivr.net/gh/PlutoLang/PlutoScript@0.1.2/plutoscript.js"></script>
+	<script type="pluto">
+		local { base32, crypto } = require "*"
+
+		local function hotp(secret, counter)
+			local mac = crypto.hmac("sha1", secret, ">I8":pack(counter), true)
+			local offset = 1 + (mac:byte(20) & 0xf)
+			local bin_code = ((mac:byte(offset) & 0x7f) << 24)
+				| (mac:byte(offset + 1) << 16)
+				| (mac:byte(offset + 2) << 8)
+				| (mac:byte(offset + 3))
+			return string.format("%06d", bin_code % 1000000)
+		end
+
+		function update_value(secret_b32)
+			document.getElementById("value").textContent = hotp(base32.decode(secret_b32), os.unixseconds() // 30)
+		end
+	</script>
+</body>
+</html>
